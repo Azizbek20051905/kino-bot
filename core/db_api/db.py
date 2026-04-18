@@ -194,7 +194,8 @@ def get_movie_details(movie_id):
     c = conn.cursor()
 
     c.execute('''
-        SELECT * FROM movies WHERE id=?
+        SELECT id, name, views, description, country, language, year, genre 
+        FROM movies WHERE id=?
     ''', (movie_id,))
 
     movie = c.fetchone()
