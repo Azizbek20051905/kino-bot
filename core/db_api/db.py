@@ -236,7 +236,7 @@ def search_movie(movie_name):
     c = conn.cursor()
 
     c.execute('''
-        SELECT m.id, m.name, m.views, m.description, m.country, m.language, m.year, m.genre, mp.size 
+        SELECT m.id, m.name, m.views, m.description, m.country, m.language, m.year, mp.size, m.genre
         FROM movies m
         LEFT JOIN movie_parts mp ON m.id = mp.movie_id AND mp.part_number = 1
         WHERE m.name LIKE ?
