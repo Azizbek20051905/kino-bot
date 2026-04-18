@@ -16,7 +16,7 @@ from core.handlers.callback import (deleted_answers, pause_message, selected_cha
                                      add_saved, del_saved, clear_admin, messages_status)
 from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, Statistic, MoviePage, AdminManage, AdminPerm
 from core.states.states import GetChannel_data, ForwardMessage, MessageNext, MoviesData, GetAds_data, AdminState
-from core.handlers.admin_mgmt import list_admins, add_admin_start, add_admin_finish, edit_admin_permissions, toggle_permission, remove_admin
+from core.handlers.admin_mgmt import list_admins, add_admin_start, add_admin_finish_id, add_admin_finish_name, edit_admin_permissions, toggle_permission, remove_admin
 from core.handlers.inlinemode import inline_echo
 from core.handlers.error_handler import error_handler
 from core.utils.commands import set_commands
@@ -137,7 +137,8 @@ async def start():
     # Admin management
     dp.callback_query.register(list_admins, AdminManage.filter(F.action == 'list'))
     dp.callback_query.register(add_admin_start, AdminManage.filter(F.action == 'add'))
-    dp.message.register(add_admin_finish, AdminState.user_id)
+    dp.message.register(add_admin_finish_id, AdminState.user_id)
+    dp.message.register(add_admin_finish_name, AdminState.full_name)
     dp.callback_query.register(edit_admin_permissions, AdminManage.filter(F.action == 'edit'))
     dp.callback_query.register(toggle_permission, AdminPerm.filter())
     dp.callback_query.register(remove_admin, AdminManage.filter(F.action == 'delete'))

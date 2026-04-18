@@ -195,9 +195,10 @@ def admin_manage_btn():
 def admin_list_btn(admins):
     keyboards = InlineKeyboardBuilder()
     for admin in admins:
-        user_id = admin[0]
-        status = "👑" if admin[1] else "👤"
-        keyboards.button(text=f"{status} {user_id}", callback_data=AdminManage(action='edit', user_id=user_id))
+        user_id = admin['user_id']
+        name = admin.get('full_name') or user_id
+        status = "👑" if admin['is_super'] else "👤"
+        keyboards.button(text=f"{status} {name}", callback_data=AdminManage(action='edit', user_id=user_id))
     
     keyboards.button(text="➕Yangi admin", callback_data=AdminManage(action='add'))
     keyboards.button(text="🔙Orqaga", callback_data=AdminPanel(model='admin_panel'))

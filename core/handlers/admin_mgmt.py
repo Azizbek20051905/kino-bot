@@ -30,17 +30,26 @@ async def add_admin_start(call: types.CallbackQuery, state: FSMContext):
     await call.message.edit_text("Yangi adminning Telegram ID sini kiriting:", reply_markup=get_back_btn("admin_panel"))
     await state.set_state(AdminState.user_id)
 
-async def add_admin_finish(message: types.Message, state: FSMContext, bot: Bot):
+async def add_admin_finish_id(message: types.Message, state: FSMContext, bot: Bot):
     if message.text.isdigit():
-        user_id = int(message.text)
-        add_admin(user_id)
-        await message.answer("Admin muvaffaqiyatli qo'shildi! Endi uning ruxsatlarini sozlashingiz mumkin.")
-        await state.clear()
-        # Refresh list
-        admins = get_all_admins()
-        await message.answer("👥 Bot adminlari ro'yxati:", reply_markup=admin_list_btn(admins))
+        await state.update_data(user_id=int(message.text))
+        await message.answer("Yangi adminning ismini kiriting:")
+        await state.set_state(AdminState.full_name)
     else:
         await message.answer("ID faqat raqamlardan iborat bo'lishi kerak. Qayta urinib ko'ring yoki /admin deb yozing.")
+
+async def add_admin_finish_name(message: types.Message, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    user_id = data['user_id']
+    full_name = message.text
+    
+    add_admin(user_id, full_name=full_name)
+    await message.answer(f"Admin {full_name} muvaffaqiyatli qo'shildi! Endi uning ruxsatlarini sozlashingiz mumkin.")
+    await state.clear()
+    
+    # Refresh list
+    admins = get_all_admins()
+    await message.answer("👥 Bot adminlari ro'yxati:", reply_markup=admin_list_btn(admins))
 
 async def edit_admin_permissions(call: types.CallbackQuery, bot: Bot, callback_data: AdminManage):
     if str(call.from_user.id) != str(settings.bots.admin_id):
@@ -53,7 +62,7 @@ async def edit_admin_permissions(call: types.CallbackQuery, bot: Bot, callback_d
         return
         
     await bot.edit_message_text(
-        text=f"👤 Admin: {callback_data.user_id}\nRuxsatlarni sozlash:",
+        text=f"👤 Admin: {admin_data.get('full_name') or callback_data.user_id} ({callback_data.user_id})\nRuxsatlarni sozlash:",
         chat_id=call.from_user.id,
         message_id=call.message.message_id,
         reply_markup=admin_permissions_btn(admin_data)

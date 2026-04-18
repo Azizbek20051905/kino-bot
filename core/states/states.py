@@ -28,3 +28,4 @@ class MessageNext(StatesGroup):
 
 class AdminState(StatesGroup):
     user_id = State()
+    full_name = State()

@@ -109,6 +109,7 @@ c.execute('''
 c.execute('''
     CREATE TABLE IF NOT EXISTS bot_admins (
         user_id INTEGER PRIMARY KEY,
+        full_name TEXT,
         is_super BOOLEAN DEFAULT FALSE,
         can_add_movie BOOLEAN DEFAULT TRUE,
         can_del_movie BOOLEAN DEFAULT TRUE,
@@ -118,6 +119,13 @@ c.execute('''
         can_view_stats BOOLEAN DEFAULT TRUE
     )
 ''')
+
+# Migration for bot_admins table
+try:
+    c.execute("ALTER TABLE bot_admins ADD COLUMN full_name TEXT")
+    conn.commit()
+except:
+    pass
 
 c.execute('''SELECT * FROM is_trues''')
 
@@ -581,27 +589,21 @@ def update_checkbox(is_true):
 # Admin management functions
 def get_admin(user_id):
     conn = sqlite3.connect('movies.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute('SELECT * FROM bot_admins WHERE user_id=?', (user_id,))
     admin = c.fetchone()
     conn.close()
     if admin:
-        return {
-            'user_id': admin[0],
-            'is_super': admin[1],
-            'can_add_movie': admin[2],
-            'can_del_movie': admin[3],
-            'can_manage_channels': admin[4],
-            'can_manage_ads': admin[5],
-            'can_send_message': admin[6],
-            'can_view_stats': admin[7]
-        }
+        return dict(admin)
     return None
 
-def add_admin(user_id, is_super=False):
+def add_admin(user_id, full_name=None, is_super=False):
     conn = sqlite3.connect('movies.db')
     c = conn.cursor()
-    c.execute('INSERT OR IGNORE INTO bot_admins (user_id, is_super) VALUES (?, ?)', (user_id, is_super))
+    # Check if exists first to avoid overwriting or just use INSERT OR REPLACE if name is updated
+    c.execute('INSERT OR REPLACE INTO bot_admins (user_id, full_name, is_super) VALUES (?, ?, ?)', 
+              (user_id, full_name, is_super))
     conn.commit()
     conn.close()
 
@@ -621,11 +623,12 @@ def update_admin_permission(user_id, column, value):
 
 def get_all_admins():
     conn = sqlite3.connect('movies.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute('SELECT * FROM bot_admins')
     admins = c.fetchall()
     conn.close()
-    return admins
+    return [dict(a) for a in admins]
 
 
 
