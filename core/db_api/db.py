@@ -231,20 +231,20 @@ def get_movie_details(movie_id):
 # Qidirish funksiyasi
 def search_movie(movie_name):
     conn = sqlite3.connect('movies.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
     c.execute('''
-        SELECT id, name, size, video, views FROM movies WHERE name LIKE ?
+        SELECT m.*, mp.size FROM movies m
+        LEFT JOIN movie_parts mp ON m.id = mp.movie_id AND mp.part_number = 1
+        WHERE m.name LIKE ?
     ''', ('%' + movie_name + '%',))
 
     movies = c.fetchall()
     conn.close()
 
     if movies:
-        result = []
-        for movie in movies:
-            result.append({'id': movie[0], 'name': movie[1], 'size': movie[2], 'video': movie[3], 'views': movie[4]})
-        return result
+        return [dict(row) for row in movies]
     else:
         return None
 
@@ -272,22 +272,20 @@ def update_movies(id, view):
 
 def all_movie():
     conn = sqlite3.connect('movies.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
     c.execute('''
-        SELECT * FROM movies
+        SELECT m.*, mp.size FROM movies m
+        LEFT JOIN movie_parts mp ON m.id = mp.movie_id AND mp.part_number = 1
     ''')
 
     movies = c.fetchall()
     conn.close()
 
     if movies:
-        result = []
-        for movie in movies:
-            result.append({'id': movie[0], 'name': movie[1], 'size': movie[2], 'video': movie[3], 'views': movie[4]})
-        return result
-    else:
-        return None
+        return [dict(row) for row in movies]
+    return None
 
 # print(all_movie())
 # movies_found = all_movie()
@@ -509,43 +507,44 @@ def insert_saved(movie_id, users_id):
 # saved user_id ga teng bolganlarga murojat qilish
 def get_saveds(users_id):
     conn = sqlite3.connect('movies.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
     c.execute('''
-        SELECT saveds.id, saveds.movie_id, saveds.users_id, movies.name, movies.size, movies.video, movies.views FROM saveds JOIN
-               movies ON movies.id = saveds.movie_id WHERE saveds.users_id = ?
+        SELECT s.id, s.movie_id, s.users_id, m.name, m.views, mp.size 
+        FROM saveds s 
+        JOIN movies m ON m.id = s.movie_id 
+        LEFT JOIN movie_parts mp ON m.id = mp.movie_id AND mp.part_number = 1
+        WHERE s.users_id = ?
     ''', (users_id,))
 
-    saveds = c.fetchall()
+    rows = c.fetchall()
     conn.close()
-    results = []
     
-    if saveds:
-        for saved in saveds:
-            results.append({'id':saved[0], 'movie_id': saved[1], 'users_id': saved[2], 'name': saved[3], 'size': saved[4], 'video': saved[5], 'views': saved[6]})
-
-    if results:
-        return results
-    else:
-        return None
+    if rows:
+        return [dict(row) for row in rows]
+    return None
 # print(get_saveds(4571))
 
 def get_saveds_movies_id(users_id, movie_id):
     conn = sqlite3.connect('movies.db')
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
     c.execute('''
-        SELECT saveds.id, saveds.movie_id, saveds.users_id, movies.name, movies.size, movies.video, movies.views FROM saveds JOIN
-               movies ON movies.id = saveds.movie_id WHERE saveds.users_id = ? AND saveds.movie_id = ?
+        SELECT s.id, s.movie_id, s.users_id, m.name, m.views, mp.size 
+        FROM saveds s 
+        JOIN movies m ON m.id = s.movie_id 
+        LEFT JOIN movie_parts mp ON m.id = mp.movie_id AND mp.part_number = 1
+        WHERE s.users_id = ? AND s.movie_id = ?
     ''', (users_id, movie_id))
 
-    saved = c.fetchone()
+    row = c.fetchone()
     conn.close()
 
-    if saved:
-        return {'id':saved[0], 'movie_id': saved[1], 'users_id': saved[2], 'name': saved[3], 'size': saved[4], 'video': saved[5], 'views': saved[6]}
-    else:
-        return None
+    if row:
+        return dict(row)
+    return None
 
 def delete_saved(saved_id):
     conn = sqlite3.connect('movies.db')
