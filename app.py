@@ -6,16 +6,18 @@ from aiogram.client.bot import DefaultBotProperties
 from core.settings import settings
 from core.handlers.basic import (admin_panel, select_add_channel, answer_channel_name, answer_channel_link,
                                  get_movie_name, get_movie_description, get_movie_country, get_movie_language,
-                                 get_movie_year, get_movie_genre, get_movie_is_series, get_movie_parts_count,
+                                 get_movie_year, get_movie_genre, get_movie_is_series, get_movie_status, get_movie_image, get_movie_parts_count,
                                  get_movie_video, get_ads_link, get_ads_name,
                                  send_movies, send_movies_id, sub_channel_answer, sub_channel, user_views, generate_movie_caption)
 from core.handlers.callback import (deleted_answers, pause_message, selected_channel, selected_admin_panel, selected_del_channel, deleted_channels,
                                      on_channels, movies, add_movies, start_answer_users, start_message, status_all, send_answer_user, answer_forward_id,
                                      delete_movies, del_movies_id, add_ads, del_ads, del_ads_id, 
                                      movie_page_handler, movie_part_switch, movie_list_handler,
-                                     add_saved, del_saved, clear_admin, messages_status)
-from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, Statistic, MoviePage, AdminManage, AdminPerm
-from core.states.states import GetChannel_data, ForwardMessage, MessageNext, MoviesData, GetAds_data, AdminState
+                                     add_saved, del_saved, clear_admin, messages_status,
+                                     movie_edit_menu, movie_edit_field, movie_add_part_start, movie_edit_value_handler,
+                                     movie_finish_edit, main_channel_view, main_channel_edit_start, main_channel_edit_finish)
+from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, Statistic, MoviePage, AdminManage, AdminPerm, MovieEdit, MainChannel
+from core.states.states import GetChannel_data, ForwardMessage, MessageNext, MoviesData, GetAds_data, AdminState, EditMovieState, MainChannelState
 from core.handlers.admin_mgmt import list_admins, add_admin_start, add_admin_finish_id, add_admin_finish_name, edit_admin_permissions, toggle_permission, remove_admin
 from core.handlers.inlinemode import inline_echo
 from core.handlers.error_handler import error_handler
@@ -150,6 +152,8 @@ async def start():
     dp.message.register(get_movie_language, MoviesData.language)
     dp.message.register(get_movie_year, MoviesData.year)
     dp.message.register(get_movie_genre, MoviesData.genre)
+    dp.callback_query.register(get_movie_status, MoviesData.status)
+    dp.message.register(get_movie_image, MoviesData.image)
     dp.callback_query.register(get_movie_is_series, MoviesData.is_series)
     dp.message.register(get_movie_parts_count, MoviesData.parts_count)
     dp.message.register(get_movie_video, MoviesData.video)
@@ -162,6 +166,17 @@ async def start():
     dp.message.register(send_movies_id, CheckText())
     dp.message.register(get_start, Command(commands='start'))
     dp.message.register(get_help, Command(commands='help'))
+    dp.callback_query.register(movie_edit_menu, MovieEdit.filter(F.action == 'menu'))
+    dp.callback_query.register(movie_edit_field, MovieEdit.filter(F.action == 'edit_field'))
+    dp.callback_query.register(movie_add_part_start, MovieEdit.filter(F.action == 'add_part'))
+    dp.callback_query.register(movie_finish_edit, MovieEdit.filter(F.action == 'finish_edit'))
+    dp.message.register(movie_edit_value_handler, EditMovieState.value)
+
+    # Main channel management
+    dp.callback_query.register(main_channel_view, MainChannel.filter(F.action == 'view'))
+    dp.callback_query.register(main_channel_edit_start, MainChannel.filter(F.action == 'edit'))
+    dp.message.register(main_channel_edit_finish, MainChannelState.link)
+
     dp.message.register(admin_panel, Command(commands='admin'))
     
     # Register error handler to send bugs to super admin

@@ -33,3 +33,11 @@ class AdminPerm(CallbackData, prefix="adm_p"):
     user_id: int
     perm: str
     value: int # 0 or 1
+
+class MovieEdit(CallbackData, prefix="m_edit"):
+    action: str # 'menu', 'edit_field', 'add_part'
+    movie_id: int
+    field: str = "" # 'name', 'status', etc.
+
+class MainChannel(CallbackData, prefix="main_ch"):
+    action: str # 'view', 'edit'

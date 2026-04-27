@@ -3,10 +3,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from core.keyboards.inline import adminpanel_btn, get_back_btn, users_btn, sub_channel_keyboard, client_user_btn
+from core.utils.callbackdata import MovieEdit
 from aiogram.types import ReplyKeyboardRemove 
 from core.states.states import GetChannel_data, MoviesData, GetAds_data
 from core.db_api.db import (insert_channel, insert_movie, insert_ads, update_movies, get_movie_details,
-                            all_channels, get_checkbox, get_admin, insert_movie_part, get_movie_parts)
+                            all_channels, get_checkbox, get_admin, insert_movie_part, get_movie_parts, get_setting)
 from core.config import set_global_var, global_var
 # from core.filters.filter import check_subscription
 from datetime import datetime, timedelta
@@ -65,32 +66,70 @@ async def get_movie_name(message: types.Message, bot: Bot, state: FSMContext):
         await message.answer("Sizda kino qo'shish ruxsati yo'q!")
         await state.clear()
         return
+    
+    if not message.text:
+        await message.answer("Iltimos, kino nomini matn ko'rinishida yuboring!")
+        return
+        
     await state.update_data(name=message.text)
     await message.answer("Kino tavsifini (description) kiriting:", reply_markup=get_back_btn("movies"))
     await state.set_state(MoviesData.description)
 
 async def get_movie_description(message: types.Message, state: FSMContext):
+    if not message.text:
+        await message.answer("Iltimos, kino tavsifini matn ko'rinishida kiriting:")
+        return
     await state.update_data(description=message.text)
     await message.answer("Kino qaysi davlatda ishlab chiqarilgan?", reply_markup=get_back_btn("movies"))
     await state.set_state(MoviesData.country)
 
 async def get_movie_country(message: types.Message, state: FSMContext):
+    if not message.text:
+        await message.answer("Iltimos, davlat nomini matn ko'rinishida kiriting:")
+        return
     await state.update_data(country=message.text)
     await message.answer("Kino tilini kiriting:", reply_markup=get_back_btn("movies"))
     await state.set_state(MoviesData.language)
 
 async def get_movie_language(message: types.Message, state: FSMContext):
+    if not message.text:
+        await message.answer("Iltimos, kino tilini matn ko'rinishida kiriting:")
+        return
     await state.update_data(language=message.text)
     await message.answer("Kino yilini kiriting:", reply_markup=get_back_btn("movies"))
     await state.set_state(MoviesData.year)
 
 async def get_movie_year(message: types.Message, state: FSMContext):
+    if not message.text:
+        await message.answer("Iltimos, kino yilini matn ko'rinishida kiriting:")
+        return
     await state.update_data(year=message.text)
     await message.answer("Kino janrini kiriting:", reply_markup=get_back_btn("movies"))
     await state.set_state(MoviesData.genre)
 
 async def get_movie_genre(message: types.Message, state: FSMContext):
+    if not message.text:
+        await message.answer("Iltimos, kino janrini matn ko'rinishida kiriting:")
+        return
     await state.update_data(genre=message.text)
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔵 Davom etmoqda", callback_data="status_ongoing")
+    kb.button(text="✅ Tugallangan", callback_data="status_completed")
+    await message.answer("Kino holatini tanlang:", reply_markup=kb.as_markup())
+    await state.set_state(MoviesData.status)
+
+async def get_movie_status(call: types.CallbackQuery, state: FSMContext):
+    status_text = "Davom etmoqda" if call.data == "status_ongoing" else "Tugallangan"
+    await state.update_data(status=status_text)
+    await call.message.edit_text("Kino uchun poster (rasm) yuboring:")
+    await state.set_state(MoviesData.image)
+
+async def get_movie_image(message: types.Message, state: FSMContext):
+    if not message.photo:
+        await message.answer("Iltimos, rasm yuboring!")
+        return
+    
+    await state.update_data(image_id=message.photo[-1].file_id)
     kb = InlineKeyboardBuilder()
     kb.button(text="🎬 Bitta qismli", callback_data="single")
     kb.button(text="🎞 Ko'p qismli (Serial)", callback_data="series")
@@ -108,12 +147,12 @@ async def get_movie_is_series(call: types.CallbackQuery, state: FSMContext):
         await state.set_state(MoviesData.parts_count)
 
 async def get_movie_parts_count(message: types.Message, state: FSMContext):
-    if message.text.isdigit():
+    if message.text and message.text.isdigit():
         await state.update_data(parts_count=int(message.text))
         await message.answer(f"1-qism videosini yuboring:")
         await state.set_state(MoviesData.video)
     else:
-        await message.answer("Iltimos, faqat raqam kiriting:")
+        await message.answer("Iltimos, faqat raqam kiriting (masalan: 10):")
 
 async def get_movie_video(message: types.Message, bot: Bot, state: FSMContext):
     if not message.video:
@@ -139,15 +178,56 @@ async def get_movie_video(message: types.Message, bot: Bot, state: FSMContext):
     parts.append({'part': current_part, 'video': pers_video_id, 'size': mb_size})
     await state.update_data(parts_list=parts)
     
+    if data.get('is_editing'):
+        insert_movie_part(data['movie_id'], current_part, pers_video_id, mb_size)
+        
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        kb = InlineKeyboardBuilder()
+        kb.button(text="➕ Yana qism qo'shish", callback_data=MovieEdit(action='add_part', movie_id=data['movie_id']))
+        kb.button(text="✅ Tugatish va Post yaratish", callback_data=MovieEdit(action='finish_edit', movie_id=data['movie_id']))
+        kb.adjust(1)
+        
+        await message.answer(f"✅ {current_part}-qism qo'shildi! Davom etasizmi?", reply_markup=kb.as_markup())
+        return
+
     if current_part < parts_count:
         await state.update_data(current_part=current_part + 1)
         await message.answer(f"{current_part + 1}-qism videosini yuboring:")
     else:
         movie_id = insert_movie(data)
-        for p in parts:
+        for p in data['parts_list']:
             insert_movie_part(movie_id, p['part'], p['video'], p['size'])
-            
-        await message.answer(f"Kino muvaffaqiyatli qo'shildi!\nkino Id si: {movie_id}", reply_markup=get_back_btn("movies"))
+        
+        # Generate professional summary post
+        bot_info = await bot.get_me()
+        m_id = movie_id if not data.get('is_editing') else data['movie_id']
+        download_url = f"https://t.me/{bot_info.username}?start={m_id}"
+        channel_link = get_setting('main_channel_url', settings.bots.base_channel)
+        
+        caption = (
+            f"🎬 <b>{data['name']}</b>\n\n"
+            f"╭───────────────\n"
+            f"├ 🧩 Qism : {data['parts_count']} ta\n"
+            f"├ 📊 Holati : {data.get('status', 'Tugallangan')}\n"
+            f"├ 🌍 Davlat : {data.get('country', 'Nomalum')}\n"
+            f"├ 🔊 Tili : {data.get('language', 'Nomalum')}\n"
+            f"├ 📅 Yili : {data.get('year', 'Nomalum')}\n"
+            f"├ 🎭 Janri : {data.get('genre', 'Nomalum')}\n"
+            f"╰───────────────\n\n"
+            f"📢 Kanal: {channel_link}\n"
+            f"🤖 Bot: @{bot_info.username}"
+        )
+        
+        kb = InlineKeyboardBuilder()
+        kb.button(text="📥 Yuklab olish", url=download_url)
+        
+        await message.answer_photo(
+            photo=data['image_id'],
+            caption=caption,
+            reply_markup=kb.as_markup()
+        )
+        
+        await message.answer(f"✅ Kino muvaffaqiyatli saqlandi!\nID: <code>{movie_id}</code>")
         await state.clear()
 # Movie ---------- end
 
@@ -195,7 +275,9 @@ def generate_movie_caption(movie, part):
     
     text += f"\n📀 Hajmi: {part[2]} MB\n"
     text += f"👁 Ko'rishlar: {movie['views']}\n"
-    text += "\n👌 @KodliKinola_robot"
+    
+    channel_link = get_setting('main_channel_url', settings.bots.base_channel)
+    text += f"\n📢 {channel_link}"
     return text
 
 async def send_movies(message: types.Message, bot: Bot):

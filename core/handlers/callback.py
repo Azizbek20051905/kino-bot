@@ -4,15 +4,16 @@ from aiogram import types, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from core.settings import settings
-from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, MoviePage
+from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, MoviePage, MovieEdit, MainChannel
 from core.keyboards.inline import (channel_btn, adminpanel_btn, del_channel_btn,
                                    get_back_btn, movies_btn, del_movies_btn,
                                    users_btn, status_message_btn, movie_pagination_btn)
 from core.db_api.db import (delete_channel, update_channel_details, all_channels, 
                             update_checkbox, all_movie, delete_movies_id, all_ads, 
-                            delete_ads, insert_saved, get_movie_details, get_movie_parts, delete_saved, get_admin)
+                            delete_ads, insert_saved, get_movie_details, get_movie_parts, delete_saved, get_admin, update_movie_metadata, insert_movie_part,
+                            get_setting, update_setting)
 # from core.settings import CheckSub
-from core.states.states import ForwardMessage, MoviesData, GetChannel_data, GetAds_data, MessageNext
+from core.states.states import ForwardMessage, MoviesData, GetChannel_data, GetAds_data, MessageNext, EditMovieState, MainChannelState
 from core.config import set_global_var, global_var
 from core.handlers.basic import user_views, answer_users, generate_movie_caption
 import uuid
@@ -416,3 +417,188 @@ async def movie_part_switch(call: CallbackQuery, bot: Bot, callback_data: MovieP
 
 async def movie_list_handler(call: CallbackQuery, bot: Bot):
     await movie_page_handler(call, bot, MoviePage(model='movie_page', page=1))
+
+async def movie_edit_menu(call: CallbackQuery, bot: Bot, callback_data: MovieEdit):
+    movie = get_movie_details(callback_data.movie_id)
+    if not movie:
+        await call.answer("Kino topilmadi!")
+        return
+        
+    text = (
+        f"⚙️ <b>Kino tahrirlash:</b> {movie['name']}\n\n"
+        f"Nimani o'zgartirmoqchisiz?"
+    )
+    
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📝 Nomini o'zgartirish", callback_data=MovieEdit(action='edit_field', movie_id=movie['id'], field='name'))
+    kb.button(text="📊 Holatini o'zgartirish", callback_data=MovieEdit(action='edit_field', movie_id=movie['id'], field='status'))
+    kb.button(text="🎭 Janrini o'zgartirish", callback_data=MovieEdit(action='edit_field', movie_id=movie['id'], field='genre'))
+    kb.button(text="➕ Qism qo'shish", callback_data=MovieEdit(action='add_part', movie_id=movie['id']))
+    kb.button(text="🔙 Orqaga", callback_data=MoviePage(model='part', movie_id=movie['id'], page=1))
+    kb.adjust(1)
+    
+    try:
+        if call.message.text:
+            await bot.edit_message_text(
+                text=text,
+                chat_id=call.from_user.id,
+                message_id=call.message.message_id,
+                reply_markup=kb.as_markup()
+            )
+        else:
+            await call.message.delete()
+            await call.message.answer(text=text, reply_markup=kb.as_markup())
+    except Exception:
+        await call.message.answer(text=text, reply_markup=kb.as_markup())
+
+async def movie_edit_field(call: CallbackQuery, state: FSMContext, callback_data: MovieEdit):
+    field_names = {
+        'name': "Yangi nomni kiriting:",
+        'status': "Yangi holatni kiriting (Davom etmoqda / Tugallangan):",
+        'genre': "Yangi janrlarni kiriting:"
+    }
+    
+    await state.update_data(movie_id=callback_data.movie_id, field=callback_data.field)
+    text = field_names.get(callback_data.field, "Yangi qiymatni kiriting:")
+    
+    try:
+        if call.message.text:
+            await call.message.edit_text(text=text)
+        else:
+            await call.message.delete()
+            await call.message.answer(text=text)
+    except Exception:
+        await call.message.answer(text=text)
+    await state.set_state(EditMovieState.value)
+
+async def movie_add_part_start(call: CallbackQuery, state: FSMContext, callback_data: MovieEdit):
+    parts = get_movie_parts(callback_data.movie_id)
+    next_part = len(parts) + 1
+    
+    movie = get_movie_details(callback_data.movie_id)
+    if not movie:
+        await call.answer("Kino topilmadi!")
+        return
+        
+    await state.update_data(
+        movie_id=callback_data.movie_id, 
+        name=movie['name'],
+        status=movie['status'],
+        country=movie.get('country'),
+        language=movie.get('language'),
+        year=movie.get('year'),
+        genre=movie.get('genre'),
+        image_id=movie.get('image_id'),
+        current_part=next_part, 
+        parts_count=next_part, # Update total parts count
+        is_editing=True
+    )
+    text = f"{next_part}-qism videosini yuboring:"
+    try:
+        if call.message.text:
+            await call.message.edit_text(text=text)
+        else:
+            await call.message.delete()
+            await call.message.answer(text=text)
+    except Exception:
+        await call.message.answer(text=text)
+    await state.set_state(MoviesData.video)
+
+async def movie_edit_value_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    movie_id = data['movie_id']
+    field = data['field']
+    value = message.text
+    
+    if not value:
+        await message.answer("Iltimos, matn kiriting!")
+        return
+        
+    update_movie_metadata(movie_id, field, value)
+    await message.answer(f"✅ Muvaffaqiyatli o'zgartirildi: {field} -> {value}")
+    await state.clear()
+    
+    # Return to edit menu
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⚙️ Tahrirlash menyusi", callback_data=MovieEdit(action='menu', movie_id=movie_id))
+    await message.answer("Boshqa narsani o'zgartirasizmi?", reply_markup=kb.as_markup())
+
+async def main_channel_view(call: CallbackQuery, bot: Bot):
+    url = get_setting('main_channel_url', '@Kdrama_tv_uz')
+    text = f"📢 <b>Asosiy kanal havolasi:</b> {url}\n\nO'zgartirish uchun tugmani bosing:"
+    
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📝 O'zgartirish", callback_data=MainChannel(action='edit'))
+    kb.button(text="🔙 Orqaga", callback_data=AdminPanel(model='admin_panel'))
+    kb.adjust(1)
+    
+    await bot.edit_message_text(text=text, chat_id=call.from_user.id, message_id=call.message.message_id, reply_markup=kb.as_markup())
+
+async def main_channel_edit_start(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_text("Yangi kanal linkini kiriting (masalan: @Kdrama_tv_uz):")
+    await state.set_state(MainChannelState.link)
+
+async def main_channel_edit_finish(message: Message, state: FSMContext):
+    url = message.text
+    if not url.startswith('@') and not url.startswith('https://'):
+        await message.answer("Xato! Link @ bilan yoki https:// bilan boshlanishi kerak.")
+        return
+        
+    update_setting('main_channel_url', url)
+    await message.answer(f"✅ Asosiy kanal havolasi yangilandi: {url}")
+    await state.clear()
+    
+    from core.keyboards.inline import adminpanel_btn
+    await message.answer("Admin panel", reply_markup=adminpanel_btn(model='xabar'))
+
+async def movie_finish_edit(call: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    if not data:
+        await call.answer("Ma'lumot topilmadi!")
+        return
+        
+    # Reuse the logic from get_movie_video to show the summary post
+    from core.handlers.basic import get_movie_video
+    # We can't easily call get_movie_video because it expects a Message object
+    # So we'll manually send the summary post here or refactor
+    
+    movie = get_movie_details(data['movie_id'])
+    parts = get_movie_parts(data['movie_id'])
+    
+    # Update state data to match what generate summary expects
+    await state.update_data(parts_count=len(parts))
+    data = await state.get_data()
+    
+    bot_info = await bot.get_me()
+    m_id = data['movie_id']
+    download_url = f"https://t.me/{bot_info.username}?start={m_id}"
+    channel_link = get_setting('main_channel_url', settings.bots.base_channel)
+    
+    caption = (
+        f"🎬 <b>{data['name']}</b>\n\n"
+        f"╭───────────────\n"
+        f"├ 🧩 Qism : {len(parts)} ta\n"
+        f"├ 📊 Holati : {data.get('status', 'Tugallangan')}\n"
+        f"├ 🌍 Davlat : {data.get('country', 'Nomalum')}\n"
+        f"├ 🔊 Tili : {data.get('language', 'Nomalum')}\n"
+        f"├ 📅 Yili : {data.get('year', 'Nomalum')}\n"
+        f"├ 🎭 Janri : {data.get('genre', 'Nomalum')}\n"
+        f"╰───────────────\n\n"
+        f"📢 Kanal: {channel_link}\n"
+        f"🤖 Bot: @{bot_info.username}"
+    )
+    
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📥 Yuklab olish", url=download_url)
+    
+    if data.get('image_id'):
+        await call.message.answer_photo(photo=data['image_id'], caption=caption, reply_markup=kb.as_markup())
+    else:
+        await call.message.answer(text=caption, reply_markup=kb.as_markup())
+        
+    await call.message.answer("✅ Tahrirlash yakunlandi!")
+    await state.clear()

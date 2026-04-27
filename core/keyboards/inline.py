@@ -1,9 +1,8 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, Statistic, MoviePage, AdminManage, AdminPerm
-
+from core.utils.callbackdata import AdminPanel, DeleteChannel, AddSaved, DeleteSaved, Statistic, MoviePage, AdminManage, AdminPerm, MovieEdit, MainChannel
 from core.settings import settings
-from core.db_api.db import all_ads, all_channels, get_checkbox, all_movie, get_saveds_movies_id, get_movie_parts
+from core.db_api.db import all_ads, all_channels, get_checkbox, all_movie, get_saveds_movies_id, get_movie_parts, get_admin
 import random
 
 def client_user_btn():
@@ -34,10 +33,11 @@ def adminpanel_btn(model):
     keyboards.button(text="➖Reklama o'chirish", callback_data=AdminPanel(model='del_ads'))
     keyboards.button(text="🎞Kino idsini aniqlash", callback_data=AdminPanel(model='movie_list'))
     keyboards.button(text="👥Adminlarni boshqarish", callback_data=AdminManage(action='list'))
+    keyboards.button(text="📢 Asosiy kanal", callback_data=MainChannel(action='view'))
     keyboards.button(text="🔼", callback_data=AdminPanel(model='clear'))
 
     # keyboards.adjust(1)
-    keyboards.adjust(2, 1, 1, 2, 1, 1, 1)
+    keyboards.adjust(2, 1, 1, 2, 1, 1, 1, 1)
 
     return keyboards.as_markup()
 
@@ -138,6 +138,11 @@ def users_btn(data, user_id, current_part=1):
         rand = random.choice(ads)
         keyboards.button(text=f"{rand['name']}", url=f"{rand['link']}")
     
+    admin = get_admin(user_id)
+    if admin:
+        keyboards.button(text="⚙️ Tahrirlash", callback_data=MovieEdit(action='menu', movie_id=data['id']))
+        rows.append(1)
+
     rows.extend([2, 1, 1])
     keyboards.adjust(*rows)
 

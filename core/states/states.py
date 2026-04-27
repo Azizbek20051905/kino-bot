@@ -18,6 +18,8 @@ class MoviesData(StatesGroup):
     language = State()
     year = State()
     genre = State()
+    status = State()
+    image = State()
     is_series = State()
     parts_count = State()
     current_part = State()
@@ -29,3 +31,11 @@ class MessageNext(StatesGroup):
 class AdminState(StatesGroup):
     user_id = State()
     full_name = State()
+
+class EditMovieState(StatesGroup):
+    movie_id = State()
+    field = State()
+    value = State()
+
+class MainChannelState(StatesGroup):
+    link = State()

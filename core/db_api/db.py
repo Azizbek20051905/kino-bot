@@ -120,6 +120,37 @@ c.execute('''
     )
 ''')
 
+# Migration for movies table
+try:
+    c.execute("ALTER TABLE movies ADD COLUMN image_id TEXT")
+    conn.commit()
+except:
+    pass
+
+try:
+    c.execute("ALTER TABLE movies ADD COLUMN status TEXT DEFAULT 'Tugallangan'")
+    conn.commit()
+except:
+    pass
+
+# Create settings table
+c.execute('''
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+''')
+# Initialize main_channel_url if not exists
+c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('main_channel_url', '@Kdrama_tv_uz')")
+conn.commit()
+
+# Migration for bot_admins table
+try:
+    c.execute("ALTER TABLE bot_admins ADD COLUMN full_name TEXT")
+    conn.commit()
+except:
+    pass
+
 # Migration for bot_admins table
 try:
     c.execute("ALTER TABLE bot_admins ADD COLUMN full_name TEXT")
@@ -148,9 +179,18 @@ def insert_movie(data):
     c.execute("PRAGMA table_info(movies)")
     columns = [col[1] for col in c.fetchall()]
     
-    fields = ["name", "description", "country", "language", "year", "genre"]
-    placeholders = ["?", "?", "?", "?", "?", "?"]
-    values = [data['name'], data.get('description'), data.get('country'), data.get('language'), data.get('year'), data.get('genre')]
+    fields = ["name", "description", "country", "language", "year", "genre", "image_id", "status"]
+    placeholders = ["?", "?", "?", "?", "?", "?", "?", "?"]
+    values = [
+        data['name'], 
+        data.get('description'), 
+        data.get('country'), 
+        data.get('language'), 
+        data.get('year'), 
+        data.get('genre'),
+        data.get('image_id'),
+        data.get('status', 'Tugallangan')
+    ]
 
     if "size" in columns:
         fields.append("size")
@@ -194,7 +234,7 @@ def get_movie_details(movie_id):
     c = conn.cursor()
 
     c.execute('''
-        SELECT id, name, views, description, country, language, year, genre 
+        SELECT id, name, views, description, country, language, year, genre, image_id, status 
         FROM movies WHERE id=?
     ''', (movie_id,))
 
@@ -256,19 +296,20 @@ def search_movie(movie_name):
 def update_movies(id, view):
     conn = sqlite3.connect('movies.db')
     c = conn.cursor()
-
-    # Qaysi ustunlarni yangilash kerakligini aniqlash
     if view:
         c.execute(f"UPDATE movies SET views = {view} WHERE id = {id}")
-
     rows_affected = c.rowcount
     conn.commit()
     conn.close()
-    
-    if rows_affected > 0:
-        return True
-    else:
-        return False
+    return rows_affected > 0
+
+def update_movie_metadata(movie_id, field, value):
+    conn = sqlite3.connect('movies.db')
+    c = conn.cursor()
+    c.execute(f"UPDATE movies SET {field}=? WHERE id=?", (value, movie_id))
+    conn.commit()
+    conn.close()
+    return True
 
 # print(update_movies(id=1, view=1))
 
@@ -631,6 +672,22 @@ def get_all_admins():
     admins = c.fetchall()
     conn.close()
     return [dict(a) for a in admins]
+
+def get_setting(key, default=None):
+    conn = sqlite3.connect('movies.db')
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE key=?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else default
+
+def update_setting(key, value):
+    conn = sqlite3.connect('movies.db')
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
+    return True
 
 
 
